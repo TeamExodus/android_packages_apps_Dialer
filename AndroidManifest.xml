@@ -17,13 +17,12 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
     package="com.android.dialer"
     coreApp="true"
-    android:versionCode="20210"
-    android:versionName="2.21">
+    android:versionCode="2021002"
+    android:versionName="2.2102">
 
     <uses-sdk
         android:minSdkVersion="23"
         android:targetSdkVersion="23" />
-
 
     <uses-permission android:name="android.permission.CALL_PHONE" />
     <uses-permission android:name="android.permission.READ_CONTACTS" />
@@ -36,9 +35,12 @@
     <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
     <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
     <uses-permission android:name="android.permission.INTERNET" />
+    <uses-permission android:name="android.permission.MANAGE_USERS" />
+    <uses-permission android:name="android.permission.INTERACT_ACROSS_USERS" />
     <uses-permission android:name="android.permission.PROCESS_OUTGOING_CALLS"/>
     <uses-permission android:name="android.permission.NFC" />
     <uses-permission android:name="android.permission.READ_PHONE_STATE" />
+    <uses-permission android:name="android.permission.READ_PRIVILEGED_PHONE_STATE" />
     <uses-permission android:name="android.permission.MODIFY_AUDIO_SETTINGS" />
     <uses-permission android:name="android.permission.MODIFY_PHONE_STATE" />
     <uses-permission android:name="android.permission.WAKE_LOCK" />
@@ -53,6 +55,8 @@
     <uses-permission android:name="com.android.voicemail.permission.READ_VOICEMAIL" />
     <uses-permission android:name="android.permission.ALLOW_ANY_CODEC_FOR_PLAYBACK" />
     <uses-permission android:name="com.android.launcher.permission.INSTALL_SHORTCUT"/>
+    <uses-permission android:name="android.permission.READ_PHONE_BLACKLIST" />
+    <uses-permission android:name="android.permission.CHANGE_PHONE_BLACKLIST" />
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
     <uses-permission android:name="android.permission.BROADCAST_STICKY" />
     <uses-permission android:name="android.permission.ACCESS_WIFI_STATE" />
@@ -61,6 +65,9 @@
      start requests, even if they happen immediately after the user
      presses home. -->
     <uses-permission android:name="android.permission.STOP_APP_SWITCHES" />
+    <uses-permission android:name="android.permission.RECORD_AUDIO" />
+    <uses-permission android:name="android.permission.CAPTURE_AUDIO_OUTPUT" />
+    <uses-permission android:name="cyanogenmod.permission.WRITE_SETTINGS" />
 
     <application
         android:name="DialerApplication"
@@ -69,10 +76,12 @@
         android:hardwareAccelerated="true"
         android:supportsRtl="true"
         android:backupAgent='com.android.dialer.DialerBackupAgent'
-        android:usesCleartextTraffic="false">
+        android:usesCleartextTraffic="true">
 
         <meta-data android:name="com.google.android.backup.api_key"
             android:value="AEdPqrEAAAAIBXgtCEKQ6W0PXVnW-ZVia2KmlV2AxsTw3GjAeQ" />
+
+        <uses-library android:name="com.qualcomm.qti.smartsearch" android:required="false"/>
 
         <!-- The entrance point for Phone UI.
              stateAlwaysHidden is set to suppress keyboard show up on
@@ -84,7 +93,7 @@
             android:clearTaskOnLaunch="true"
             android:icon="@mipmap/ic_launcher_phone"
             android:enabled="@*android:bool/config_voice_capable"
-            android:windowSoftInputMode="stateAlwaysHidden|adjustNothing">
+            android:windowSoftInputMode="stateAlwaysHidden|adjustResize">
             <intent-filter>
                 <action android:name="android.intent.action.DIAL" />
                 <category android:name="android.intent.category.DEFAULT" />
@@ -166,6 +175,17 @@
                 <action android:name="android.intent.action.VIEW"/>
                 <category android:name="android.intent.category.DEFAULT"/>
                 <data android:mimeType="vnd.android.cursor.item/calls"/>
+            </intent-filter>
+        </activity>
+
+        <activity android:name=".callstats.CallStatsDetailActivity"
+            android:label="@string/callStatsDetailTitle"
+            android:theme="@style/CallDetailActivityTheme"
+            android:screenOrientation="portrait"
+            android:icon="@mipmap/ic_launcher_phone" >
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
             </intent-filter>
         </activity>
 
@@ -259,6 +279,16 @@
             </intent-filter>
         </receiver>
 
+        <activity android:name=".SpeedDialListActivity"
+            android:theme="@style/DialtactsTheme"
+            android:label="@string/speed_dial_settings"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="com.android.phone.action.SPEED_DIAL_SETTINGS" />
+                <category android:name="android.intent.category.DEFAULT"/>
+            </intent-filter>
+        </activity>
+
         <receiver android:name=".interactions.UndemoteOutgoingCallReceiver">
             <intent-filter>
                 <action android:name="android.intent.action.NEW_OUTGOING_CALL" />
@@ -296,15 +326,9 @@
                   android:screenOrientation="nosensor" >
         </activity>
 
-        <activity android:name="com.android.dialer.list.SpeedDialActivity"
-                  android:theme="@android:style/Theme.Translucent"
-                  android:label="@string/speed_dial_activity"
-                  android:hardwareAccelerated="true"
-                  android:showOnLockScreen="true"
-                  android:excludeFromRecents="true"
-                  android:launchMode="singleInstance"
-                  android:exported="true" >
-        </activity>
+        <service android:name="com.android.services.callrecorder.CallRecorderService"
+                 android:process="com.android.incallui">
+        </service>
 
         <!-- BroadcastReceiver for receiving Intents from Notification mechanism. -->
         <receiver android:name="com.android.incallui.NotificationBroadcastReceiver"
@@ -317,5 +341,11 @@
                 <action android:name="android.telecom.InCallService"/>
             </intent-filter>
         </service>
+
+        <provider android:name="com.android.dialer.lookup.LookupProvider"
+                  android:authorities="com.android.dialer.provider"
+                  android:exported="false"
+                  android:multiprocess="false" />
+
     </application>
 </manifest>

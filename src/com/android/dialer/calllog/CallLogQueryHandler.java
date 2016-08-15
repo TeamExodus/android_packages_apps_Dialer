@@ -68,6 +68,11 @@ public class CallLogQueryHandler extends NoNullCursorAsyncQueryHandler {
      */
     public static final int CALL_TYPE_ALL = -1;
 
+    /**
+     * To specify all slots.
+     */
+    public static final int CALL_SIM_ALL = -1;
+
     private final WeakReference<Listener> mListener;
 
     private final Context mContext;
@@ -169,6 +174,12 @@ public class CallLogQueryHandler extends NoNullCursorAsyncQueryHandler {
             where.append(" AND ");
             where.append(String.format("(%s = ?)", Calls.TYPE));
             selectionArgs.add(Integer.toString(callType));
+            if (callType == Calls.MISSED_TYPE) {
+                // also query for blacklisted calls as they are 'missed'
+                where.append(" OR ");
+                where.append(String.format("(%s = ?)", Calls.TYPE));
+                selectionArgs.add(Integer.toString(Calls.BLACKLIST_TYPE));
+            }
         } else {
             where.append(" AND NOT ");
             where.append("(" + Calls.TYPE + " = " + Calls.VOICEMAIL_TYPE + ")");
@@ -182,7 +193,7 @@ public class CallLogQueryHandler extends NoNullCursorAsyncQueryHandler {
 
         final int limit = (mLogLimit == -1) ? NUM_LOGS_TO_DISPLAY : mLogLimit;
         final String selection = where.length() > 0 ? where.toString() : null;
-        Uri uri = TelecomUtil.getCallLogUri(mContext).buildUpon()
+        Uri uri = TelecomUtil.getAllCallLogUri(mContext).buildUpon()
                 .appendQueryParameter(Calls.LIMIT_PARAM_KEY, Integer.toString(limit))
                 .build();
         startQuery(token, null, uri,

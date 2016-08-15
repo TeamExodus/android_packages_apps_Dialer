@@ -12,4 +12,15 @@
 @com.android.dialer.NeededForReflection *;
 }
 
+# Keep ExtendedLookupDirectories for assets/contacts_extensions.properties
+-keep class com.android.dialer.lookup.ExtendedLookupDirectories { *; }
+
+# Keep behavior class needed by design library
+-keep class android.support.design.widget.AppBarLayout$ScrollingViewBehavior { *; }
+
 -verbose
+
+-keep public class cyanogenmod.app.StatusBarPanelCustomTile
+-keep public class cyanogenmod.app.CustomTile
+
+-dontwarn cyanogenmod.app.*
