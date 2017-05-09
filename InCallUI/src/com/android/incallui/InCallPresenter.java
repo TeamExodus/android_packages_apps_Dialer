@@ -65,6 +65,7 @@ import com.android.incalluibind.ObjectFactory;
 import java.util.Collections;
 import java.util.List;
 import java.util.Locale;
+import java.util.Objects;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CopyOnWriteArrayList;
@@ -745,6 +746,9 @@ public class InCallPresenter implements CallList.Listener,
     public void onDisconnect(Call call) {
         maybeShowErrorDialogOnDisconnect(call);
 
+        // Send broadcast to dismiss deflect dialog.
+        dismissDeflectOrTransferDialog(call.getId());
+
         // We need to do the run the same code as onCallListChange.
         onCallListChange(mCallList);
 
@@ -765,6 +769,8 @@ public class InCallPresenter implements CallList.Listener,
         if (call == null) {
             return;
         }
+        // Send broadcast to dismiss deflect dialog.
+        dismissDeflectOrTransferDialog(call.getId());
 
         wakeUpScreen();
         call.setRequestedVideoState(videoState);
@@ -774,6 +780,19 @@ public class InCallPresenter implements CallList.Listener,
     public void onUpgradeToVideoFail(int error, Call call) {
         //NO-OP
     }
+
+    /**
+     * Sends broadcast to dismiss Deflection or ECT dialog
+     */
+    private void dismissDeflectOrTransferDialog(String callId) {
+        Log.d(this, "dismissDeflectOrTransferDialog() callId = " + callId);
+        if (Objects.equals(callId, QtiCallUtils.getDeflectOrTransferCallId())) {
+            Intent intent = new Intent(QtiCallUtils.INTENT_ACTION_DIALOG_DISMISS);
+            mInCallActivity.sendBroadcast(intent);
+            QtiCallUtils.setDeflectOrTransferCallId(null);
+        }
+    }
+
 
     /**
      * Given the call list, return the state in which the in-call screen should be.
@@ -1039,7 +1058,7 @@ public class InCallPresenter implements CallList.Listener,
         }
 
         Call call = mCallList.getVideoUpgradeRequestCall();
-        if (call != null) {
+        if (call != null && !InCallLowBatteryListener.getInstance().onChangeToVideoCall(call)) {
             VideoProfile videoProfile = new VideoProfile(videoState);
             call.getVideoCall().sendSessionModifyResponse(videoProfile);
             call.setSessionModificationState(Call.SessionModificationState.NO_REQUEST);
@@ -1704,6 +1723,9 @@ public class InCallPresenter implements CallList.Listener,
             if (mExternalCallNotifier != null && mExternalCallList != null) {
                 mExternalCallList.removeExternalCallListener(mExternalCallNotifier);
             }
+            mExternalCallNotifier = null;
+            mExternalCallList = null;
+
             mStatusBarNotifier = null;
 
             InCallCsRedialHandler.getInstance().tearDown();
@@ -1896,7 +1918,7 @@ public class InCallPresenter implements CallList.Listener,
         return mPowerManager.isInteractive();
     }
 
-    private void wakeUpScreen() {
+    public void wakeUpScreen() {
         if (!isScreenInteractive()) {
             acquireWakeLock();
             releaseWakeLock();

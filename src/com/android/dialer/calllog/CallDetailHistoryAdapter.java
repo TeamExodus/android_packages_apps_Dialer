@@ -141,6 +141,16 @@ public class CallDetailHistoryAdapter extends BaseAdapter {
             }
         }
 
+        /**
+         * Ims icon(VoLTE/VoWiFi/ViLTE/ViWiFi) will be shown if carrierOne is supported
+         * otherwise, default video icon will be shown if it is a video call.
+         */
+        if (QtiImsExtUtils.isCarrierOneSupported()) {
+            callTypeIconView.addImsIcon(callType, isVideoCall);
+        } else {
+            callTypeIconView.setShowVideo(isVideoCall);
+        }
+
         CharSequence callTypeText =
                 isRcsCall ? EnrichedCallHandler.getInstance().getCallTypeText(callType) :
                 mCallTypeHelper.getCallTypeText(callType, isVideoCall);

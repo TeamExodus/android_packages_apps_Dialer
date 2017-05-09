@@ -303,7 +303,6 @@ public class VideoCallPresenter extends Presenter<VideoCallPresenter.VideoCallUi
 
         // Register for surface and video events from {@link InCallVideoCallListener}s.
         InCallVideoCallCallbackNotifier.getInstance().addSurfaceChangeListener(this);
-        InCallUiStateNotifier.getInstance().addListener(this);
         mCurrentVideoState = VideoProfile.STATE_AUDIO_ONLY;
         mCurrentCallState = Call.State.INVALID;
 
@@ -312,6 +311,7 @@ public class VideoCallPresenter extends Presenter<VideoCallPresenter.VideoCallUi
         onStateChange(inCallState, inCallState, CallList.getInstance());
         InCallVideoCallCallbackNotifier.getInstance().addVideoEventListener(this,
                 VideoUtils.isVideoCall(mCurrentVideoState));
+        InCallUiStateNotifier.getInstance().addListener(this, true );
     }
 
     /**
@@ -619,6 +619,22 @@ public class VideoCallPresenter extends Presenter<VideoCallPresenter.VideoCallUi
             return;
         }
 
+        if (!QtiCallUtils.shallShowStaticImageUi(mContext) &&
+             QtiCallUtils.shallTransmitStaticImage(mContext) &&
+             mIsInBackground &&
+             shallTransmitStaticImage() &&
+             !VideoUtils.isTransmissionEnabled(call) &&
+             mVideoCall != null) {
+            /* Unset the pause image when Tx is disabled for eg. when background video call
+               that is transmitting static image is downgraded to Rx or to voice */
+            mVideoCall.setPauseImage(null);
+        }
+
+        // Wakes up the screen,if its off, when user upgrades to VT call.
+        if (mCurrentVideoState == VideoProfile.STATE_AUDIO_ONLY && isVideoCall) {
+            InCallPresenter.getInstance().wakeUpScreen();
+        }
+
         updateCameraSelection(call);
 
         if (isVideoCall) {
@@ -686,7 +702,6 @@ public class VideoCallPresenter extends Presenter<VideoCallPresenter.VideoCallUi
             updateCameraSelection(newPrimaryCall);
             adjustVideoMode(newPrimaryCall);
         }
-        checkForOrientationAllowedChange(newPrimaryCall);
     }
 
     private boolean isVideoMode() {
@@ -1079,7 +1094,12 @@ public class VideoCallPresenter extends Presenter<VideoCallPresenter.VideoCallUi
         Log.v(this, "showVideoUi : showIncoming = " + showIncomingVideo + " showOutgoing = "
                 + showOutgoingVideo + " shallTransmitStaticImage = " + shallTransmitStaticImage());
         if (showIncomingVideo || showOutgoingVideo) {
-            ui.showVideoViews(showOutgoingVideo && !shallTransmitStaticImage(), showIncomingVideo);
+            if (QtiCallUtils.shallShowStaticImageUi(mContext)) {
+                ui.showVideoViews(showOutgoingVideo && !shallTransmitStaticImage(),
+                        showIncomingVideo);
+            } else {
+                ui.showVideoViews(showOutgoingVideo, showIncomingVideo);
+            }
 
             boolean hidePreview = shallHidePreview(isConf, videoState);
             Log.v(this, "showVideoUi, hidePreview = " + hidePreview);
@@ -1088,8 +1108,12 @@ public class VideoCallPresenter extends Presenter<VideoCallPresenter.VideoCallUi
             }
 
             if (showOutgoingVideo) {
-                setPreviewSize(mDeviceOrientation, mPreviewAspectRatio);
-                maybeLoadPreConfiguredImageAsync();
+                if ((SystemProperties.getInt(PROP_DISABLE_VIDEOCALL_PIP_MODE, 0) == 1)) {
+                    setPreviewSize(mDeviceOrientation, mPreviewAspectRatio);
+                }
+                if (QtiCallUtils.shallShowStaticImageUi(mContext)) {
+                    maybeLoadPreConfiguredImageAsync();
+                }
             }
 
             if (isVideoReceptionEnabled && !shallTransmitStaticImage()) {
@@ -1163,9 +1187,18 @@ public class VideoCallPresenter extends Presenter<VideoCallPresenter.VideoCallUi
 
         mIsInBackground = !showing;
 
-        if (mPrimaryCall == null || !VideoUtils.isActiveVideoCall(mPrimaryCall)) {
+        if (!QtiCallUtils.shallShowStaticImageUi(mContext)) {
+            sShallTransmitStaticImage = sUseDefaultImage = mIsInBackground;
+        }
+
+        if (!VideoUtils.isVideoCall(mPrimaryCall)) {
             Log.w(this, "onUiShowing, received for non-active video call");
             return;
+        }
+
+        if (!QtiCallUtils.shallShowStaticImageUi(mContext) &&
+            VideoUtils.isTransmissionEnabled(mPrimaryCall)) {
+            setPauseImage();
         }
 
         if (showing) {
@@ -1252,6 +1285,18 @@ public class VideoCallPresenter extends Presenter<VideoCallPresenter.VideoCallUi
         }
 
         mPreviewSurfaceState = PreviewSurfaceState.CAPABILITIES_RECEIVED;
+        Point previewDimensions = ui.getPreviewSize();
+
+        if (QtiImsExtUtils.isCarrierOneSupported() &&
+                QtiImsExtUtils.shallCheckSupportForHighVideoQuality(mContext) &&
+                previewDimensions != null &&
+                (previewDimensions.x != width || previewDimensions.y != height)) {
+            QtiCallUtils.displayToast(mContext, (mContext.getResources().getString(
+                    R.string.video_quality_changed) + mContext.getResources().getString(
+                    QtiCallUtils.getVideoQualityResourceId(
+                    QtiCallUtils.sizeToVideoQuality(width, height)))));
+        }
+
         changePreviewDimensions(width, height);
         ui.setPreviewRotation(mDeviceOrientation);
 
@@ -1267,6 +1312,37 @@ public class VideoCallPresenter extends Presenter<VideoCallPresenter.VideoCallUi
         }
     }
 
+    private boolean isLandscapeOrientation(final int orientation) {
+        return (orientation == InCallOrientationEventListener.SCREEN_ORIENTATION_90 ||
+                orientation == InCallOrientationEventListener.SCREEN_ORIENTATION_270);
+    }
+
+    public void setPreviewSurfaceSize(int width, int height) {
+        VideoCallUi ui = getUi();
+        if (ui == null) {
+            return;
+        }
+
+        final int orientation = mDeviceOrientation;
+        Log.d(this, "setPreviewSurfaceSize orientation: " + orientation +
+                " width = " + width + " height = " + height);
+
+        final boolean isPortrait = width < height;
+        int w = width;
+        int h = height;
+
+        if ((isLandscapeOrientation(orientation) && !isPortrait) ||
+                !isLandscapeOrientation(orientation) && isPortrait) {
+            /* preview video needs to be displayed in landscape window so set
+               portrait preview surface size and vice-versa */
+            width = h;
+            height = w;
+        }
+
+        Log.d(this, "setPreviewSurfaceSize final width: " + width + " final height: " + height);
+        ui.setPreviewSurfaceSize(width, height);
+    }
+
     /**
      * Changes the dimensions of the preview surface.
      *
@@ -1279,9 +1355,6 @@ public class VideoCallPresenter extends Presenter<VideoCallPresenter.VideoCallUi
             return;
         }
 
-        // Resize the surface used to display the preview video
-        ui.setPreviewSurfaceSize(width, height);
-
         // Configure the preview surface to the correct aspect ratio.
         float aspectRatio = 1.0f;
         if (width > 0 && height > 0) {
@@ -1293,6 +1366,9 @@ public class VideoCallPresenter extends Presenter<VideoCallPresenter.VideoCallUi
         // Resize the textureview housing the preview video and rotate it appropriately based on
         // the device orientation
         setPreviewSize(mDeviceOrientation, mPreviewAspectRatio);
+
+        // Resize the surface used to display the preview video
+        setPreviewSurfaceSize(width, height);
     }
 
     /**

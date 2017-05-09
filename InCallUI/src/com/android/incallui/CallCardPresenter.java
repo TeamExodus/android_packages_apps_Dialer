@@ -60,6 +60,8 @@ import com.android.incalluibind.ObjectFactory;
 
 import java.lang.ref.WeakReference;
 
+import org.codeaurora.ims.utils.QtiImsExtUtils;
+
 import static com.android.contacts.common.compat.CallSdkCompat.Details.PROPERTY_ENTERPRISE_CALL;
 /**
  * Presenter for the Call Card Fragment.
@@ -258,7 +260,11 @@ public class CallCardPresenter extends Presenter<CallCardPresenter.CallCardUi>
 
         if (mInCallContactInteractions != null &&
                 (oldState == InCallState.INCOMING || newState == InCallState.INCOMING)) {
-            ui.showContactContext(newState != InCallState.INCOMING);
+            boolean showIncomingVideo = (primary != null) ? VideoCallPresenter.showIncomingVideo(
+                    primary.getVideoState(), primary.getState()) : false;
+            if (!showIncomingVideo) {
+                ui.showContactContext(newState != InCallState.INCOMING);
+            }
         }
 
         Log.d(this, "Primary call: " + primary);
@@ -562,7 +568,10 @@ public class CallCardPresenter extends Presenter<CallCardPresenter.CallCardUi>
             ui.setPrimaryCallElapsedTime(false, 0);
             mCallTimer.cancel();
         } else {
-            ui.setPrimaryCallElapsedTime(true, mPrimary.getCallDuration());
+            final long connectTime = mPrimary.getConnectTimeMillis();
+            if (connectTime > 0) {
+                ui.setPrimaryCallElapsedTime(true, mPrimary.getCallDuration());
+            }
         }
     }
 
@@ -660,6 +669,8 @@ public class CallCardPresenter extends Presenter<CallCardPresenter.CallCardUi>
     }
 
     private void updateContactInteractions() {
+        boolean showIncomingVideo = (mPrimary != null) ? VideoCallPresenter.showIncomingVideo(
+                mPrimary.getVideoState(), mPrimary.getState()) : false;
         if (mPrimary != null && mPrimaryContactInfo != null
                 && (mPrimaryContactInfo.locationAddress != null
                         || mPrimaryContactInfo.openingHours != null)) {
@@ -675,9 +686,13 @@ public class CallCardPresenter extends Presenter<CallCardPresenter.CallCardUi>
                     mDistanceHelper.calculateDistance(mPrimaryContactInfo.locationAddress),
                     mPrimaryContactInfo.openingHours);
             getUi().setContactContextContent(mInCallContactInteractions.getListAdapter());
-            getUi().showContactContext(mPrimary.getState() != State.INCOMING);
+            if (!showIncomingVideo) {
+                getUi().showContactContext(mPrimary.getState() != State.INCOMING);
+            }
         } else {
-            getUi().showContactContext(false);
+            if (!showIncomingVideo) {
+                getUi().showContactContext(false);
+            }
         }
     }
 
@@ -943,9 +958,13 @@ public class CallCardPresenter extends Presenter<CallCardPresenter.CallCardUi>
             return;
         }
 
-        final boolean notUpdateSecondary = mSecondary.getState() == Call.State.ACTIVE
-                && !mSecondary.can(android.telecom.Call.Details.CAPABILITY_SUPPORT_HOLD)
-                && !mSecondary.can(android.telecom.Call.Details.CAPABILITY_HOLD);
+        boolean notUpdateSecondary = false;
+        if (QtiImsExtUtils.isCarrierConfigEnabled(mContext,
+                "hide_held_call_when_end_conf_call")) {
+            notUpdateSecondary = mSecondary.getState() == Call.State.ACTIVE
+                    && !mSecondary.can(android.telecom.Call.Details.CAPABILITY_SUPPORT_HOLD)
+                    && !mSecondary.can(android.telecom.Call.Details.CAPABILITY_HOLD);
+        }
         Log.d(TAG, "notUpdateSecondary:" + notUpdateSecondary);
         if (mSecondary.isConferenceCall()) {
             ui.setSecondary(

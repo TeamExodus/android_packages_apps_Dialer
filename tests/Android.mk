@@ -1,3 +1,4 @@
+ifeq ($(ANDROID_TEST),true)
 LOCAL_PATH:= $(call my-dir)
 include $(CLEAR_VARS)
 
@@ -27,3 +28,4 @@ LOCAL_INSTRUMENTATION_FOR := Dialer
 LOCAL_SDK_VERSION := current
 
 include $(BUILD_PACKAGE)
+endif

@@ -46,11 +46,15 @@ import android.telecom.InCallService.VideoCall;
 import android.telephony.PhoneNumberUtils;
 import android.telephony.SubscriptionManager;
 import android.telephony.TelephonyManager;
+import android.util.Size;
+
+import com.android.incallui.util.TelecomCallUtil;
 
 import com.android.incallui.util.TelecomCallUtil;
 
 import java.lang.reflect.*;
 import java.util.ArrayList;
+import java.util.HashMap;
 
 import org.codeaurora.internal.IExtTelephony;
 import org.codeaurora.ims.QtiCallConstants;
@@ -62,6 +66,30 @@ import org.codeaurora.ims.utils.QtiImsExtUtils;
 public class QtiCallUtils {
 
     private static String LOG_TAG = "QtiCallUtils";
+    private static int VIDEO_QUALITY_UNKNOWN = -1;
+    private static final HashMap<Size, Integer>
+            VIDEO_QUALITY_TABLE = new HashMap<Size, Integer>();
+
+    /**
+     * Edit number variables for  deflect/call transfer feature.
+     */
+    public static final int ACTIVITY_REQUEST_ENTER_NUMBER = 1;
+    public static final String INTENT_EXTRA_DIALOG_TITLE = "Title";
+    public static final String INTENT_ACTION_DIALOG_DISMISS =
+            "com.qti.editnumber.INTENT_ACTION_DIALOG_DISMISS";
+    private static String mEditNumberCallId;
+    private static int mRequestedVideoState = -1;
+
+    static {
+        VIDEO_QUALITY_TABLE.put(new Size(320,240), VideoProfile.QUALITY_LOW);
+        VIDEO_QUALITY_TABLE.put(new Size(240,320), VideoProfile.QUALITY_LOW);
+        VIDEO_QUALITY_TABLE.put(new Size(352,288), VideoProfile.QUALITY_LOW);
+        VIDEO_QUALITY_TABLE.put(new Size(288,352), VideoProfile.QUALITY_LOW);
+        VIDEO_QUALITY_TABLE.put(new Size(640,480), VideoProfile.QUALITY_MEDIUM);
+        VIDEO_QUALITY_TABLE.put(new Size(480,640), VideoProfile.QUALITY_MEDIUM);
+        VIDEO_QUALITY_TABLE.put(new Size(960,720), VideoProfile.QUALITY_HIGH);
+        VIDEO_QUALITY_TABLE.put(new Size(720,960), VideoProfile.QUALITY_HIGH);
+    }
 
     /**
      * Private constructor for QtiCallUtils as we don't want to instantiate this class
@@ -99,6 +127,14 @@ public class QtiCallUtils {
             default:
                 return R.string.video_quality_unknown;
         }
+    }
+
+    public static int sizeToVideoQuality(int width, int height) {
+        Size size = new Size(width, height);
+        if (VIDEO_QUALITY_TABLE.containsKey(size)) {
+            return VIDEO_QUALITY_TABLE.get(size);
+        }
+        return VIDEO_QUALITY_UNKNOWN;
     }
 
     /**
@@ -199,6 +235,7 @@ public class QtiCallUtils {
                 final int selCallType = itemToCallType.get(item);
                 Log.v(this, "Videocall: ModifyCall: upgrade/downgrade to "
                         + callTypeToString(selCallType));
+                mRequestedVideoState = selCallType;
                 VideoProfile videoProfile = new VideoProfile(selCallType);
                 changeToVideoClicked(call, videoProfile, context);
                 dialog.dismiss();
@@ -209,6 +246,10 @@ public class QtiCallUtils {
         builder.setSingleChoiceItems(items.toArray(new CharSequence[0]), index, listener);
         alert = builder.create();
         alert.show();
+    }
+
+    public static int getRequestedVideoState() {
+        return mRequestedVideoState;
     }
 
     public static void changeToVideoCall(Call call, VideoProfile videoProfile, Context context) {
@@ -270,6 +311,14 @@ public class QtiCallUtils {
         }
         return context != null && QtiImsExtUtils.useCustomVideoUi(context);
     }
+
+    public static boolean shallShowStaticImageUi(Context context) {
+        if (context == null) {
+            Log.w(context, "Context is null...");
+        }
+        return context != null && QtiImsExtUtils.shallShowStaticImageUi(context);
+    }
+
 
     /**
      * Checks the boolean flag in config file to figure out if transmitting static image
@@ -572,5 +621,29 @@ public class QtiCallUtils {
     public static boolean hasVoiceOrVideoCapabilities(Call call) {
         return hasVoiceCapabilities(call) || hasTransmitVideoCapabilities(call)
                 || hasReceiveVideoCapabilities(call);
+    }
+
+    public static String getDeflectOrTransferCallId() {
+        if (mEditNumberCallId != null) {
+            return mEditNumberCallId;
+        }
+        return null;
+    }
+
+    public static void setDeflectOrTransferCallId(String CallId) {
+        mEditNumberCallId = CallId;
+    }
+
+    /**
+     * Checks the boolean flag in config file to enable call deflect or ECT
+     * feature with static number in ims settings
+     */
+    public static boolean useStaticNumberForCallDeflectOrTranfer(Context context) {
+        if (context == null) {
+            Log.w(context, "Context is null...");
+            return false;
+        }
+        return context.getResources().getBoolean(
+                R.bool.config_ims_call_deflect_static_number_enable);
     }
 }

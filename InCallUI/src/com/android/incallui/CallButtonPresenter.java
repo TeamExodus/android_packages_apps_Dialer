@@ -355,9 +355,11 @@ public class CallButtonPresenter extends Presenter<CallButtonPresenter.CallButto
         int currUnpausedVideoState = VideoUtils.getUnPausedVideoState(currVideoState);
         currUnpausedVideoState |= VideoProfile.STATE_BIDIRECTIONAL;
 
-        VideoProfile videoProfile = new VideoProfile(currUnpausedVideoState);
-        videoCall.sendSessionModifyRequest(videoProfile);
-        mCall.setSessionModificationState(Call.SessionModificationState.WAITING_FOR_RESPONSE);
+        if (!InCallLowBatteryListener.getInstance().onChangeToVideoCall(mCall)) {
+            VideoProfile videoProfile = new VideoProfile(currUnpausedVideoState);
+            videoCall.sendSessionModifyRequest(videoProfile);
+            mCall.setSessionModificationState(Call.SessionModificationState.WAITING_FOR_RESPONSE);
+        }
 
         if (QtiCallUtils.useCustomVideoUi(context)) {
             InCallAudioManager.getInstance().onModifyCallClicked(mCall,
@@ -451,22 +453,15 @@ public class CallButtonPresenter extends Presenter<CallButtonPresenter.CallButto
         getUi().setVideoPaused(pause);
     }
 
-    public void callTransferClicked(int type) {
-        String number = null;
+    public void callTransferClicked(int type, String number) {
         Context mContext = getUi().getContext();
-        if (type != QtiImsExtUtils.QTI_IMS_CONSULTATIVE_TRANSFER) {
-            /**
-             * Since there are no editor options available to provide a number during
-             * blind or assured transfer, for now, making use of the existing
-             * call deflection editor to provide the required number.
-             */
+        if (QtiCallUtils.useStaticNumberForCallDeflectOrTranfer(mContext)) {
             number = QtiImsExtUtils.getCallDeflectNumber(mContext.getContentResolver());
             if (number == null) {
-                 QtiCallUtils.displayToast(mContext, R.string.qti_ims_transfer_num_error);
+                QtiCallUtils.displayToast(mContext, R.string.qti_ims_transfer_num_error);
                 return;
             }
         }
-
         boolean status = mCall.sendCallTransferRequest(type, number);
         if (!status) {
             QtiCallUtils.displayToast(mContext, R.string.qti_ims_transfer_request_error);
@@ -579,7 +574,7 @@ public class CallButtonPresenter extends Presenter<CallButtonPresenter.CallButto
         ui.showButton(BUTTON_SWITCH_CAMERA, isVideo && !sIsHideMe);
         // show hide me button only for active video calls
         ui.showButton(BUTTON_HIDE_ME, isCallActive && isVideo &&
-                QtiCallUtils.shallTransmitStaticImage(getUi().getContext()));
+                QtiCallUtils.shallShowStaticImageUi(getUi().getContext()));
         ui.showButton(BUTTON_PAUSE_VIDEO, isVideo && !useExt && !useCustomVideoUi &&
                 !mEnhanceEnable);
         if (isVideo) {
@@ -703,6 +698,12 @@ public class CallButtonPresenter extends Presenter<CallButtonPresenter.CallButto
         CallButtonUi ui = getUi();
         if (ui != null) {
             ui.updateColors();
+        }
+    }
+
+    public void setCallTransferCallId() {
+        if (mCall != null) {
+            QtiCallUtils.setDeflectOrTransferCallId(mCall.getId());
         }
     }
 }
